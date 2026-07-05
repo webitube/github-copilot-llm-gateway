@@ -199,6 +199,56 @@
         },
         "github.copilot.llm-gateway.inlineCompletionMaxTokens": {
           "type": "number",
+          "default": 4096,
+          "description": "Maximum output tokens for inline completions",
+          "order": 16
+        },
+        "github.copilot.llm-gateway.enableLoopDetection": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable detection of repetitive reasoning loops in LLM output. When a loop is detected, the stream is terminated and a recovery request is sent to force a final result.",
+          "order": 17
+        },
+        "github.copilot.llm-gateway.loopDetectionWindowSize": {
+          "type": "number",
+          "default": 200,
+          "description": "Window size (in characters) for tracking repetitions in the reasoning stream.",
+          "order": 18
+        },
+        "github.copilot.llm-gateway.loopDetectionMaxRepeats": {
+          "type": "number",
+          "default": 2,
+          "description": "Maximum allowed repetitions of a phrase before triggering termination (e.g., 2 is OK, the 3rd triggers).",
+          "order": 19
+        },
+        "github.copilot.llm-gateway.loopDetectionUniqueRatio": {
+          "type": "number",
+          "default": 0.3,
+          "minimum": 0.0,
+          "maximum": 1.0,
+          "description": "Minimum unique sentence ratio (0-1) before triggering termination.",
+          "order": 20
+        },
+        "github.copilot.llm-gateway.loopDetectionPhraseLength": {
+          "type": "number",
+          "default": 4,
+          "description": "Minimum phrase length (in words) to consider a match for repetition detection.",
+          "order": 21
+        },
+        "github.copilot.llm-gateway.loopDetectionReasoningBudget": {
+          "type": "number",
+          "default": 1024,
+          "description": "Maximum reasoning tokens before forced stop.",
+          "order": 22
+        },
+        "github.copilot.llm-gateway.loopDetectionInterruptionPrompt": {
+          "type": "string",
+          "default": "You were caught in a reasoning loop. Please provide the final result now.",
+          "description": "The prompt sent to the model to force convergence when a loop is detected.",
+          "order": 23
+        },
+        "github.copilot.llm-gateway.inlineCompletionMaxTokens": {
+          "type": "number",
           "default": 256,
           "minimum": 1,
           "description": "Maximum tokens generated per inline completion. Lower values are faster and cheaper.",

@@ -41,6 +41,7 @@ If native BYOK already works well for you, you don't need this extension. If you
 | **Tool-call JSON repair**    | Recovers truncated / malformed tool-call arguments (unclosed strings or braces, trailing commas) instead of aborting the call, and fills in missing _required_ arguments from the tool schema so the call still runs.                                      |
 | **Streaming tool-call assembly** | Reassembles tool calls from incremental stream deltas across multiple wire formats, tolerating late or missing call IDs.                                                                                                                              |
 | **Reasoning / thinking handling** | Routes `<think>`/`<thinking>` blocks (and a separate `reasoning_content` field) into Copilot's thinking UI instead of dumping chain-of-thought into the chat — handling tags split across stream chunks and LM Studio's stray-tag quirk, with a fallback when a model exhausts its budget mid-thought. |
+| **Loop detection & recovery** | Monitors reasoning streams for repetitive patterns (budget exhaustion, stop-sequence repetition, structural repetition). When a loop is detected, automatically interrupts the stream and sends a recovery request to force a final answer. |
 | **Safe context budgeting**   | Auto-detects the real context window from `/v1/models` (across vLLM, Ollama, llama.cpp, and LocalAI field names) and shrinks `max_tokens` conservatively so small servers don't return context-length errors.                                            |
 | **Tool-call tuning**         | Sends a low agent temperature and exposes parallel-tool-call / tool-choice toggles to stabilize tool-call formatting from finicky fine-tuned models.                                                                                                      |
 | **Actionable diagnostics**   | Turns raw connection / auth / timeout and tool-parser failures into concrete fixes (remove a stray `/v1`, drop a `Bearer ` prefix, raise the timeout, disable tool calling).                                                                              |
@@ -225,6 +226,24 @@ These settings control how the extension handles agentic features like code edit
 
 > **Tip**: If your model outputs tool descriptions as text instead of actually calling tools, try setting **Agent Temperature** to `0.0` and disabling **Parallel Tool Calling**.
 
+### Loop Detection Settings
+
+Reasoning models can sometimes get stuck in repetitive "thought loops" where they generate the same reasoning patterns indefinitely. The loop detection feature monitors the reasoning stream in real-time and automatically interrupts the loop, then sends a recovery request to force a final answer.
+
+| Setting                                  | Default     | Description                                                                                              |
+| ---------------------------------------- | ----------- | -------------------------------------------------------------------------------------------------------- |
+| **Enable Loop Detection**                | `false`     | Master switch for reasoning loop detection. Enable when models get stuck in repetitive reasoning.         |
+| **Loop Detection Reasoning Budget**      | `1024`      | Maximum estimated reasoning tokens before forced stop (1 token ≈ 4 characters).                          |
+| **Loop Detection Max Repeats**           | `2`         | Maximum allowed repetitions of stop sequences (e.g., "Final Answer:") before triggering.                 |
+| **Loop Detection Unique Ratio**          | `0.3`       | Minimum unique sentence ratio (0-1). Lower values are more tolerant of repetition.                       |
+| **Loop Detection Phrase Length**         | `4`         | Minimum word-count in a phrase to consider for repetition matching.                                      |
+| **Loop Detection Window Size**           | `200`       | Character window size for tracking structural repetitions.                                               |
+| **Loop Detection Interruption Prompt**   | _(see below)| Prompt appended when a loop is detected to force the model to provide a final answer.                    |
+
+> **Default interruption prompt**: `"You were caught in a reasoning loop. Please provide the final result now."`
+
+> **Tip**: Start with defaults. If you see false positives (legitimate reasoning interrupted), increase `loopDetectionReasoningBudget` and `loopDetectionUniqueRatio`. If loops aren't caught, decrease them.
+
 ### Diagnostic Settings
 
 | Setting              | Default | Description                                                                                                                                        |
@@ -368,6 +387,18 @@ The model failed to generate output. Try:
 1. **Check tool parser** — Ensure `--tool-call-parser` matches your model family
 2. **Disable tool calling** — Set `github.copilot.llm-gateway.enableToolCalling` to `false` to test basic chat
 3. **Reduce context** — Your conversation may exceed the model's limit
+
+### Model stuck in a reasoning loop
+
+The model generates repetitive reasoning content without producing a final answer.
+
+1. **Enable loop detection** — Set `github.copilot.llm-gateway.enableLoopDetection` to `true`
+2. **Tune the reasoning budget** — If legitimate reasoning is interrupted, increase `loopDetectionReasoningBudget` (default `1024`)
+3. **Adjust unique ratio** — If loops aren't caught, decrease `loopDetectionUniqueRatio` (default `0.3`)
+4. **Check the output channel** — Loop detection logs `WARNING: Loop detected, initiating recovery protocol.` when triggered
+5. **Customize the interruption prompt** — Set `loopDetectionInterruptionPrompt` to a prompt that works better with your specific model
+
+> **How it works**: When a loop is detected, the extension breaks the reasoning stream and sends a second request with the interruption prompt appended. Loop detection is disabled for the recovery request so the model can produce a clean final answer. Expect ~2x latency for loop-triggered requests.
 
 ### Tools described but not executed
 

@@ -20,64 +20,64 @@ The following settings will be added to the extension configuration:
 ### Phase 1: Configuration & Infrastructure
 **Goal:** Define the settings and types necessary to support loop detection.
 
-- [ ] Update `package.json` to include the new configuration settings.
-- [ ] Update `src/types.ts` to include `LoopDetectionConfig` and `LoopDetectionResult` interfaces.
-- [ ] Update `src/frameworkConfig.ts` (or wherever `GatewayConfig` is defined) to include the new loop detection settings.
+- [x] Update `package.json` to include the new configuration settings.
+- [x] Update `src/types.ts` to include `LoopDetectionConfig` and `LoopDetectionResult` interfaces.
+- [x] Update `src/frameworkConfig.ts` (or wherever `GatewayConfig` is defined) to include the new loop detection settings.
 
 ### Phase 2: Porting Loop Detection Logic
 **Goal:** Bring the proven heuristics from the `webllama` project into the gateway.
 
-- [ ] Create `src/loopDetection.ts`.
-- [ ] Port the `LoopDetector` class from `webllama/src/ts/detection/LoopDetector.ts`.
-- [ ] Port the following heuristics from `webllama/src/ts/detection/heuristics/`:
-    - `structuralRepetition.ts`
-    - `keywordFrequency.ts`
-    - `reasoningBudget.ts`
-    - `thoughtLoopDetector.ts`
-- [ ] Implement stop sequence detection: monitor for `["Final Answer:", "Conclusion:", "Answer:"]` and trigger termination after `loopDetectionMaxRepeats` occurrences.
-- [ ] Ensure all dependencies and types are correctly mapped to the gateway's project structure.
+- [x] Create `src/loopDetection.ts`.
+- [x] Port the `LoopDetector` class from `webllama/src/ts/detection/LoopDetector.ts`.
+- [x] Port the following heuristics from `webllama/src/ts/detection/heuristics/`:
+    - [x] `structuralRepetition.ts`
+    - [x] `keywordFrequency.ts`
+    - [x] `reasoningBudget.ts`
+    - [x] `thoughtLoopDetector.ts`
+- [x] Implement stop sequence detection: monitor for `["Final Answer:", "Conclusion:", "Answer:"]` and trigger termination after `loopDetectionMaxRepeats` occurrences.
+- [x] Ensure all dependencies and types are correctly mapped to the gateway's project structure.
 
 ### Phase 3: Stream Interception & Termination
 **Goal:** Integrate the detector into the response streaming pipeline to detect loops in real-time.
 
-- [ ] Modify `src/responseStreamer.ts`:
-    - [ ] Instantiate `LoopDetector` within `streamResponse`.
-    - [ ] Feed `reasoning_content` and `ThinkingParser` output into the detector.
-    - [ ] If a loop is detected, trigger an early break of the stream.
-    - [ ] Update `StreamStats` to include a `loopDetected` flag.
-- [ ] Verify that the stream is terminated cleanly without crashing the reporter.
+- [x] Modify `src/responseStreamer.ts`:
+    - [x] Instantiate `LoopDetector` within `streamResponse`.
+    - [x] Feed `reasoning_content` and `ThinkingParser` output into the detector.
+    - [x] If a loop is detected, trigger an early break of the stream.
+    - [x] Update `StreamStats` to include a `loopDetected` flag.
+- [x] Verify that the stream is terminated cleanly without crashing the reporter.
 
 ### Phase 4: Recovery Protocol Implementation
 **Goal:** Implement the "Interrupt and Provide Final Response" logic in the provider.
 
-- [ ] Modify `src/provider.ts` in `provideLanguageModelChatResponse`:
-    - [ ] Check `stats.loopDetected` after `streamResponse` completes.
-    - [ ] If `true`, initiate a recovery request:
-        - [ ] Construct a new message list including the original history.
-        - [ ] Append the accumulated reasoning as an `assistant` message.
-        - [ ] Append the `loopDetectionInterruptionPrompt` (or the `system_prompt_final_instructions` from webllama) as a `user` message.
-        - [ ] Set `extraOptions` to disable reasoning (e.g., `reasoning_effort: 'off'`, `enable_thinking: false`, `preserve_thinking: false`).
-    - [ ] Stream the recovery response to the user.
+- [x] Modify `src/provider.ts` in `provideLanguageModelChatResponse`:
+    - [x] Check `stats.loopDetected` after `streamResponse` completes.
+    - [x] If `true`, initiate a recovery request:
+        - [x] Construct a new message list including the original history.
+        - [x] Append the accumulated reasoning as an `assistant` message.
+        - [x] Append the `loopDetectionInterruptionPrompt` (or the `system_prompt_final_instructions` from webllama) as a `user` message.
+        - [x] Set `extraOptions` to disable reasoning (e.g., `reasoning_effort: 'off'`, `enable_thinking: false`, `preserve_thinking: false`).
+    - [x] Stream the recovery response to the user.
 
 ### Phase 5: Testing & Validation
 **Goal:** Ensure the detector works correctly and the recovery protocol is seamless.
 
-- [ ] Create `src/__tests__/loopDetection.test.ts`:
-    - [ ] Port and adapt unit tests from `webllama/src/ts/detection/` (e.g., `loopDetector.test.ts`, `loopDetector.uniqueSentences.test.ts`).
-    - [ ] Test various loop scenarios (structural, keyword, budget).
-- [ ] Create integration tests for the recovery flow in `src/__tests__/provider.test.ts`.
-- [ ] Perform manual validation with a model known to loop.
+- [x] Create `src/__tests__/loopDetection.test.ts`:
+    - [x] Port and adapt unit tests from `webllama/src/ts/detection/` (e.g., `loopDetector.test.ts`, `loopDetector.uniqueSentences.test.ts`).
+    - [x] Test various loop scenarios (structural, keyword, budget).
+- [x] Create integration tests for the recovery flow in `src/__tests__/loopDetectionIntegration.test.ts`.
+- [x] Perform manual validation with a model known to loop. (see [DEVOPS.md](./DEVOPS.md) for manual validation steps)
 
 ### Phase 6: Documentation & Onboarding
 **Goal:** Document the feature for users and future maintainers.
 
-- [ ] Update `README.md` to describe the Loop Detection feature and its configuration.
-- [ ] Create `DEVOPS.md`:
-    - [ ] Document how to test the loop detection logic.
-    - [ ] Describe the impact on token usage and latency.
-- [ ] Create `ONBOARDING.md`:
-    - [ ] Explain the architecture of the loop detection system.
-    - [ ] Guide new engineers on how to add or tune heuristics.
+- [x] Update `README.md` to describe the Loop Detection feature and its configuration.
+- [x] Create `DEVOPS.md`:
+    - [x] Document how to test the loop detection logic.
+    - [x] Describe the impact on token usage and latency.
+- [x] Create `ONBOARDING.md`:
+    - [x] Explain the architecture of the loop detection system.
+    - [x] Guide new engineers on how to add or tune heuristics.
 
 ---
 

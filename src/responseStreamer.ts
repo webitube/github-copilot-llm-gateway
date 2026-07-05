@@ -9,7 +9,8 @@
  */
 
 import { ThinkingParser, ThinkingChunk } from './thinking';
-import { OpenAIUsage } from './types';
+import { OpenAIUsage, LoopDetectionConfig } from './types';
+import { LoopDetector } from './loopDetection';
 
 export interface StreamReporter {
   reportText(text: string): void;
@@ -39,6 +40,7 @@ export interface StreamStats {
   totalTextParts: number;
   hadThinking: boolean;
   thinkingForceClosed: boolean;
+  loopDetected: boolean;
   /**
    * True once a usage frame has been dispatched to the reporter. Internal
    * book-keeping to dedupe re-emitted totals from chatty servers; optional
@@ -53,6 +55,8 @@ export interface StreamResponseParams {
   reporter: StreamReporter;
   /** Called before reading each chunk; return true to stop early. */
   isCancelled: () => boolean;
+  /** Configuration for loop detection. */
+  loopConfig: LoopDetectionConfig;
   /**
    * Called with each finished tool call. The callback is responsible for
    * JSON-repairing the arguments and filling any missing required properties
@@ -108,12 +112,20 @@ function processStreamChunk(
   reporter: StreamReporter,
   stats: StreamStats,
   inReasoningField: boolean,
-  resolveToolCallArgs: StreamResponseParams['resolveToolCallArgs']
+  resolveToolCallArgs: StreamResponseParams['resolveToolCallArgs'],
+  detector: LoopDetector
 ): boolean {
   if (chunk.reasoning_content) {
     stats.hadThinking = true;
     inReasoningField = true;
     reporter.reportThinking(chunk.reasoning_content);
+
+    const result = detector.processChunk(chunk.reasoning_content);
+    if (result.loopDetected) {
+      stats.loopDetected = true;
+      // We don't break here because processStreamChunk is a helper;
+      // the loop in streamResponse will handle the break.
+    }
   }
 
   if (chunk.content) {
@@ -124,6 +136,12 @@ function processStreamChunk(
     stats.totalContentLength += chunk.content.length;
     for (const piece of parser.process(chunk.content)) {
       reportParserPiece(piece, reporter, stats, false);
+      if (piece.t === 'T') {
+        const result = detector.processChunk(piece.c);
+        if (result.loopDetected) {
+          stats.loopDetected = true;
+        }
+      }
     }
   }
 
@@ -152,7 +170,7 @@ function processStreamChunk(
  * use to decide whether the response was empty and needs an error fallback.
  */
 export async function streamResponse(params: StreamResponseParams): Promise<StreamStats> {
-  const { chunks, reporter, isCancelled, resolveToolCallArgs } = params;
+  const { chunks, reporter, isCancelled, resolveToolCallArgs, loopConfig } = params;
 
   const stats: StreamStats = {
     totalContentLength: 0,
@@ -160,18 +178,20 @@ export async function streamResponse(params: StreamResponseParams): Promise<Stre
     totalTextParts: 0,
     hadThinking: false,
     thinkingForceClosed: false,
+    loopDetected: false,
     reportedUsage: false,
   };
 
   const parser = new ThinkingParser();
+  const detector = new LoopDetector(loopConfig);
   let inReasoningField = false;
 
   for await (const chunk of chunks) {
-    if (isCancelled()) {
+    if (isCancelled() || stats.loopDetected) {
       break;
     }
     inReasoningField = processStreamChunk(
-      chunk, parser, reporter, stats, inReasoningField, resolveToolCallArgs
+      chunk, parser, reporter, stats, inReasoningField, resolveToolCallArgs, detector
     );
   }
 

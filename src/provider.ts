@@ -686,13 +686,18 @@ export class GatewayProvider
         reporter,
         isCancelled: () => token.isCancellationRequested,
         resolveToolCallArgs: (toolCall) => this.resolveToolCallArgs(toolCall, toolSchemas),
+        loopConfig: this.config.loopDetection,
       });
 
       this.outputChannel.appendLine(
         `Completed chat request, received ${stats.totalContentLength} chars, ${stats.totalTextParts} text parts, ${stats.totalToolCalls} tool calls`
       );
 
-      if (isEmptyStreamResult(stats)) {
+      // Recovery protocol: if a loop was detected, send a recovery request
+      if (stats.loopDetected) {
+        this.outputChannel.appendLine('WARNING: Loop detected, initiating recovery protocol.');
+        await this.handleLoopRecovery(model, truncatedMessages, safeMaxOutputTokens, filteredTools, toolSchemas, progress, token);
+      } else if (isEmptyStreamResult(stats)) {
         const toolCount = filteredTools?.length ?? 0;
         await this.handleEmptyResponse(model, inputText, openAIMessages.length, toolCount, token, progress);
       }
@@ -1246,6 +1251,79 @@ export class GatewayProvider
     progress.report(new vscode.LanguageModelTextPart(errorMessage));
   }
 
+  /**
+   * Handle loop recovery by sending a recovery request to the model.
+   * This appends the interruption prompt to force the model out of its reasoning loop.
+   */
+  private async handleLoopRecovery(
+    model: vscode.LanguageModelChatInformation,
+    truncatedMessages: readonly OpenAIMessage[],
+    safeMaxOutputTokens: number,
+    filteredTools: OpenAIToolDefinition[] | undefined,
+    toolSchemas: Map<string, Record<string, unknown> | undefined>,
+    progress: vscode.Progress<vscode.LanguageModelResponsePart>,
+    token: vscode.CancellationToken
+  ): Promise<void> {
+    this.outputChannel.appendLine('Initiating loop recovery protocol.');
+
+    // Report that we're recovering
+    progress.report(
+      new vscode.LanguageModelThinkingPart(
+        'The model was caught in a reasoning loop. Sending a recovery request to force a final result...',
+        '',
+        { vscode_reasoning_done: true }
+      )
+    );
+
+    try {
+      // Build recovery messages - append the interruption prompt as an assistant message
+      const recoveryMessages = [
+        ...truncatedMessages,
+        {
+          role: 'assistant',
+          content: this.config.loopDetection.loopDetectionInterruptionPrompt,
+        },
+      ];
+
+      const recoveryRequestOptions = buildChatRequest({
+        model: model.id,
+        messages: recoveryMessages,
+        maxTokens: safeMaxOutputTokens,
+        temperature: DEFAULT_TEMPERATURE,
+        tools: filteredTools,
+        toolChoice: filteredTools && filteredTools.length > 0 ? this.mapToolChoice(undefined) : undefined,
+        parallelToolCalls: this.config.parallelToolCalling,
+        extraOptions: {
+          ...this.config.extraModelOptions,
+          ...resolvePerModelOptions(model.id, this.config.perModelOptions),
+        },
+      });
+
+      this.outputChannel.appendLine('Sending recovery request to model.');
+
+      const reporter = this.createStreamReporter(progress);
+      const recoveryChunks = this.client.streamChatCompletion(recoveryRequestOptions, token);
+      const recoveryStats = await streamResponse({
+        chunks: recoveryChunks as AsyncIterable<StreamChunk>,
+        reporter,
+        isCancelled: () => token.isCancellationRequested,
+        resolveToolCallArgs: (toolCall) => this.resolveToolCallArgs(toolCall, toolSchemas),
+        loopConfig: { ...this.config.loopDetection, enableLoopDetection: false },
+      });
+
+      this.outputChannel.appendLine(
+        `Recovery request completed, received ${recoveryStats.totalContentLength} chars, ${recoveryStats.totalTextParts} text parts, ${recoveryStats.totalToolCalls} tool calls`
+      );
+    } catch (error) {
+      this.outputChannel.appendLine(`ERROR: Recovery request failed: ${error instanceof Error ? error.message : String(error)}`);
+      progress.report(
+        new vscode.LanguageModelTextPart(
+          'I was unable to recover from a reasoning loop. Please try again or check the inference server logs.'
+        )
+      );
+    }
+  }
+
   private handleChatError(error: unknown): never {
     const errorMessage = error instanceof Error ? error.message : String(error);
     const errorStack = error instanceof Error ? error.stack : '';
@@ -1361,6 +1439,15 @@ export class GatewayProvider
       inlineCompletionMaxTokens: config.get<number>('inlineCompletionMaxTokens', 256),
       inlineCompletionDebounce: config.get<number>('inlineCompletionDebounce', 300),
       inlineCompletionTimeout: config.get<number>('inlineCompletionTimeout', 3000),
+      loopDetection: {
+        enableLoopDetection: config.get<boolean>('enableLoopDetection', false),
+        loopDetectionWindowSize: config.get<number>('loopDetectionWindowSize', 200),
+        loopDetectionMaxRepeats: config.get<number>('loopDetectionMaxRepeats', 2),
+        loopDetectionUniqueRatio: config.get<number>('loopDetectionUniqueRatio', 0.3),
+        loopDetectionPhraseLength: config.get<number>('loopDetectionPhraseLength', 4),
+        loopDetectionReasoningBudget: config.get<number>('loopDetectionReasoningBudget', 1024),
+        loopDetectionInterruptionPrompt: config.get<string>('loopDetectionInterruptionPrompt', 'You were caught in a reasoning loop. Please provide the final result now.'),
+      },
     };
 
     const MAX_INT32 = 2147483647; // Maximum value for setTimeout (signed 32-bit integer)

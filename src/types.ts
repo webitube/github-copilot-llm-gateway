@@ -1,8 +1,20 @@
-/**
- * Type definitions for OpenAI-compatible API responses
- */
+export interface LoopDetectionConfig {
+  enableLoopDetection: boolean;
+  loopDetectionWindowSize: number;
+  loopDetectionMaxRepeats: number;
+  loopDetectionUniqueRatio: number;
+  loopDetectionPhraseLength: number;
+  loopDetectionReasoningBudget: number;
+  loopDetectionInterruptionPrompt: string;
+}
+
+export interface LoopDetectionResult {
+  loopDetected: boolean;
+  reason?: string;
+}
 
 export interface OpenAIModel {
+
   id: string;
   object: string;
   created: number;
@@ -166,4 +178,6 @@ export interface GatewayConfig {
   inlineCompletionMaxTokens: number;
   inlineCompletionDebounce: number;
   inlineCompletionTimeout: number;
+  /** Loop detection settings for monitoring reasoning streams. */
+  loopDetection: LoopDetectionConfig;
 }

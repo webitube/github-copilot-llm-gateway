@@ -6,6 +6,17 @@ import {
   isEmptyStreamResult,
   streamResponse,
 } from '../responseStreamer';
+import { LoopDetectionConfig } from '../types';
+
+const DEFAULT_LOOP_CONFIG: LoopDetectionConfig = {
+  enableLoopDetection: true,
+  loopDetectionReasoningBudget: 1000,
+  loopDetectionMaxRepeats: 3,
+  loopDetectionUniqueRatio: 0.5,
+  loopDetectionPhraseLength: 5,
+  loopDetectionWindowSize: 2000,
+  loopDetectionInterruptionPrompt: 'Stop reasoning and provide a final answer.',
+};
 
 interface ReporterEvent {
   kind: 'text' | 'thinking' | 'thinkingDone' | 'toolCall' | 'usage';
@@ -57,6 +68,7 @@ describe('streamResponse', () => {
       reporter,
       isCancelled: () => false,
       resolveToolCallArgs: identityArgs,
+      loopConfig: DEFAULT_LOOP_CONFIG,
     });
     assert.equal(stats.totalTextParts, 1);
     assert.equal(stats.totalContentLength, 5);
@@ -75,6 +87,7 @@ describe('streamResponse', () => {
       reporter,
       isCancelled: () => false,
       resolveToolCallArgs: identityArgs,
+      loopConfig: DEFAULT_LOOP_CONFIG,
     });
     assert.equal(stats.hadThinking, true);
     const kinds = events.map((e) => e.kind);
@@ -89,6 +102,7 @@ describe('streamResponse', () => {
       reporter,
       isCancelled: () => false,
       resolveToolCallArgs: identityArgs,
+      loopConfig: DEFAULT_LOOP_CONFIG,
     });
     assert.equal(stats.hadThinking, true);
     const kinds = events.map((e) => e.kind);
@@ -104,6 +118,7 @@ describe('streamResponse', () => {
       reporter,
       isCancelled: () => false,
       resolveToolCallArgs: identityArgs,
+      loopConfig: DEFAULT_LOOP_CONFIG,
     });
     assert.equal(stats.hadThinking, true);
     const textEvents = events.filter((e) => e.kind === 'text').map((e) => e.value);
@@ -125,6 +140,7 @@ describe('streamResponse', () => {
       reporter,
       isCancelled: () => false,
       resolveToolCallArgs: identityArgs,
+      loopConfig: DEFAULT_LOOP_CONFIG,
     });
     const textValue = events
       .filter((e) => e.kind === 'text')
@@ -151,6 +167,7 @@ describe('streamResponse', () => {
       reporter,
       isCancelled: () => false,
       resolveToolCallArgs: (tc) => JSON.parse(tc.arguments) as Record<string, unknown>,
+      loopConfig: DEFAULT_LOOP_CONFIG,
     });
     assert.equal(stats.totalToolCalls, 1);
     assert.equal(events.length, 1);
@@ -172,6 +189,7 @@ describe('streamResponse', () => {
         return callCount > 2;
       },
       resolveToolCallArgs: identityArgs,
+      loopConfig: DEFAULT_LOOP_CONFIG,
     });
     const textEvents = events.filter((e) => e.kind === 'text');
     assert.ok(textEvents.length < 3);
@@ -185,6 +203,7 @@ describe('streamResponse', () => {
       reporter,
       isCancelled: () => false,
       resolveToolCallArgs: identityArgs,
+      loopConfig: DEFAULT_LOOP_CONFIG,
     });
     assert.equal(stats.thinkingForceClosed, true);
     assert.equal(stats.totalTextParts, 0);
@@ -203,6 +222,7 @@ describe('streamResponse', () => {
       reporter,
       isCancelled: () => false,
       resolveToolCallArgs: identityArgs,
+      loopConfig: DEFAULT_LOOP_CONFIG,
     });
     assert.equal(stats.thinkingForceClosed, true);
     assert.ok(stats.totalTextParts > 0);
@@ -219,6 +239,7 @@ describe('streamResponse', () => {
       reporter,
       isCancelled: () => false,
       resolveToolCallArgs: identityArgs,
+      loopConfig: DEFAULT_LOOP_CONFIG,
     });
     assert.equal(stats.totalContentLength, 0);
     assert.equal(stats.totalTextParts, 0);
@@ -245,6 +266,7 @@ describe('streamResponse', () => {
       reporter,
       isCancelled: () => false,
       resolveToolCallArgs: identityArgs,
+      loopConfig: DEFAULT_LOOP_CONFIG,
     });
     assert.equal(stats.reportedUsage, true);
     const usageEvents = events.filter((e) => e.kind === 'usage');
@@ -273,6 +295,7 @@ describe('streamResponse', () => {
       reporter,
       isCancelled: () => false,
       resolveToolCallArgs: identityArgs,
+      loopConfig: DEFAULT_LOOP_CONFIG,
     });
     const usageEvents = events.filter((e) => e.kind === 'usage');
     assert.equal(usageEvents.length, 1);
@@ -285,6 +308,7 @@ describe('streamResponse', () => {
       reporter,
       isCancelled: () => false,
       resolveToolCallArgs: identityArgs,
+      loopConfig: DEFAULT_LOOP_CONFIG,
     });
     assert.equal(stats.reportedUsage, false);
     assert.equal(events.filter((e) => e.kind === 'usage').length, 0);
@@ -300,6 +324,7 @@ describe('isEmptyStreamResult', () => {
         totalToolCalls: 0,
         hadThinking: false,
         thinkingForceClosed: false,
+        loopDetected: false,
       }),
       true
     );
@@ -313,6 +338,7 @@ describe('isEmptyStreamResult', () => {
         totalToolCalls: 0,
         hadThinking: false,
         thinkingForceClosed: false,
+        loopDetected: false,
       }),
       false
     );
@@ -326,6 +352,7 @@ describe('isEmptyStreamResult', () => {
         totalToolCalls: 1,
         hadThinking: false,
         thinkingForceClosed: false,
+        loopDetected: false,
       }),
       false
     );
@@ -339,6 +366,7 @@ describe('isEmptyStreamResult', () => {
         totalToolCalls: 0,
         hadThinking: true,
         thinkingForceClosed: false,
+        loopDetected: false,
       }),
       false
     );
@@ -352,6 +380,7 @@ describe('isEmptyStreamResult', () => {
         totalToolCalls: 0,
         hadThinking: false,
         thinkingForceClosed: true,
+        loopDetected: false,
       }),
       false
     );
