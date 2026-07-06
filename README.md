@@ -238,9 +238,13 @@ Reasoning models can sometimes get stuck in repetitive "thought loops" where the
 | **Loop Detection Unique Ratio**          | `0.3`       | Minimum unique sentence ratio (0-1). Lower values are more tolerant of repetition.                       |
 | **Loop Detection Phrase Length**         | `4`         | Minimum word-count in a phrase to consider for repetition matching.                                      |
 | **Loop Detection Window Size**           | `200`       | Character window size for tracking structural repetitions.                                               |
-| **Loop Detection Interruption Prompt**   | _(see below)| Prompt appended when a loop is detected to force the model to provide a final answer.                    |
+| **Loop Detection Interruption Prompt**   | _(see below)| Prompt appended when a loop is detected *during reasoning/thinking* to force the model to provide a final answer. |
+| **Loop Detection Content Interruption Prompt** | _(see below)| Prompt appended when a loop is detected *during final token generation* (non-reasoning content). |
+| **Tool Failure Recovery Prompt**         | _(see below)| Prompt injected when the model returns an empty response (0 chars, 0 text parts, 0 tool calls) to recover from a tool failure. |
 
-> **Default interruption prompt**: `"You were caught in a reasoning loop. Please provide the final result now."`
+> **Default reasoning interruption prompt**: `"You were caught in a reasoning loop. Please provide the final result now."`
+> **Default content interruption prompt**: `"Loop detected. Please finalize your response and move on."`
+> **Default tool failure recovery prompt**: `"Please review your work and move on. \n"`
 
 > **Tip**: Start with defaults. If you see false positives (legitimate reasoning interrupted), increase `loopDetectionReasoningBudget` and `loopDetectionUniqueRatio`. If loops aren't caught, decrease them.
 

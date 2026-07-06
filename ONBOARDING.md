@@ -62,8 +62,9 @@ The loop detection system sits between the inference server's streaming response
    - Detector returns `{ loopDetected: boolean, reason?: string }`
    - If `loopDetected === true` → stream breaks early, `stats.loopDetected = true`
 4. After stream completes:
-   - If `stats.loopDetected` → `handleLoopRecovery()` fires a recovery request
-   - Recovery request has loop detection **disabled** to avoid infinite recovery loops
+   - If `stats.loopDetected` → `handleLoopRecovery()` fires a recovery request (picks reasoning or content prompt based on `stats.loopDetectedInReasoning`)
+   - If `isEmptyStreamResult(stats)` (0 chars, 0 text parts, 0 tool calls) → `handleEmptyResponse()` fires a recovery request with `toolFailureRecoveryPrompt`
+   - Recovery requests have loop detection **disabled** to avoid infinite recovery loops
 5. Recovery response streams to user normally
 
 ---
@@ -82,7 +83,9 @@ interface LoopDetectionConfig {
   loopDetectionUniqueRatio: number;     // Min unique sentence ratio (0-1)
   loopDetectionPhraseLength: number;    // Min words in a phrase for matching
   loopDetectionWindowSize: number;      // Char window for structural analysis
-  loopDetectionInterruptionPrompt: string; // Prompt sent on recovery
+  loopDetectionInterruptionPrompt: string; // Prompt sent on reasoning loop recovery
+  loopDetectionContentInterruptionPrompt: string; // Prompt sent on content (non-reasoning) loop recovery
+  toolFailureRecoveryPrompt: string;    // Prompt injected when stream returns empty (tool failure)
 }
 ```
 
@@ -262,13 +265,18 @@ Set `"github.copilot.llm-gateway.verboseLogging": true` in settings, then check 
 
 ### Key Log Lines
 
+All loop detection and recovery logs use the `[LoopDetector]` prefix.
+
 | Log Line | Meaning |
-|----------|---------|
-| `WARNING: Loop detected, initiating recovery protocol.` | Loop was detected; recovery is starting |
-| `Initiating loop recovery protocol.` | Recovery request is being built |
-| `Sending recovery request to model.` | Recovery request is being sent |
-| `Recovery request completed, received X chars` | Recovery succeeded |
-| `ERROR: Recovery request failed: ...` | Recovery failed; user sees error message |
+|----------|--------|
+| `[LoopDetector] WARNING: Loop detected (...)` | Loop was detected; recovery is starting |
+| `[LoopDetector] Initiating loop recovery protocol.` | Recovery request is being built |
+| `[LoopDetector] Sending recovery request to model.` | Recovery request is being sent |
+| `[LoopDetector] Recovery request completed, received X chars` | Recovery succeeded |
+| `[LoopDetector] ERROR: Recovery request failed: ...` | Recovery failed; user sees error message |
+| `[LoopDetector] WARNING: Empty stream detected (...)` | Stream returned 0 chars, 0 text parts, 0 tool calls — likely a tool failure |
+| `[LoopDetector] Injecting recovery prompt: "..."` | Tool-failure recovery prompt is being injected |
+| `[LoopDetector] Recovery successful: received X chars` | Tool-failure recovery succeeded |
 
 ### Common Issues
 
