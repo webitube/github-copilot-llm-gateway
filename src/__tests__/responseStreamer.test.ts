@@ -17,6 +17,7 @@ const DEFAULT_LOOP_CONFIG: LoopDetectionConfig = {
   loopDetectionWindowSize: 2000,
   loopDetectionInterruptionPrompt: 'Stop reasoning and provide a final answer.',
   loopDetectionContentInterruptionPrompt: 'Loop detected. Please finalize your response and move on.',
+  toolFailureRecoveryPrompt: 'Continue from where you left off right before the error.',
 };
 
 interface ReporterEvent {
@@ -359,7 +360,7 @@ describe('isEmptyStreamResult', () => {
     );
   });
 
-  test('false when thinking occurred', () => {
+  test('true even when thinking occurred but no visible output', () => {
     assert.equal(
       isEmptyStreamResult({
         totalContentLength: 0,
@@ -369,11 +370,11 @@ describe('isEmptyStreamResult', () => {
         thinkingForceClosed: false,
         loopDetected: false,
       }),
-      false
+      true
     );
   });
 
-  test('false when thinking was force-closed', () => {
+  test('true even when thinking was force-closed but no visible output', () => {
     assert.equal(
       isEmptyStreamResult({
         totalContentLength: 0,
@@ -383,7 +384,7 @@ describe('isEmptyStreamResult', () => {
         thinkingForceClosed: true,
         loopDetected: false,
       }),
-      false
+      true
     );
   });
 });

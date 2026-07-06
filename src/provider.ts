@@ -715,8 +715,15 @@ export class GatewayProvider
           stats.loopDetectedInReasoning
         );
       } else if (isEmptyStreamResult(stats)) {
-        const toolCount = filteredTools?.length ?? 0;
-        await this.handleEmptyResponse(model, inputText, openAIMessages.length, toolCount, token, progress);
+        await this.handleEmptyResponse(
+          model,
+          truncatedMessages,
+          safeMaxOutputTokens,
+          filteredTools,
+          toolSchemas,
+          progress,
+          token
+        );
       }
       this.recordCompletedRequest(model.id, modelName, capturedUsage);
       this._onDidChangeRequestState.fire({
@@ -1238,34 +1245,78 @@ export class GatewayProvider
 
   private async handleEmptyResponse(
     model: vscode.LanguageModelChatInformation,
-    inputText: string,
-    messageCount: number,
-    toolCount: number,
-    token: vscode.CancellationToken,
-    progress: vscode.Progress<vscode.LanguageModelResponsePart>
+    truncatedMessages: readonly OpenAIMessage[],
+    safeMaxOutputTokens: number,
+    filteredTools: OpenAIToolDefinition[] | undefined,
+    toolSchemas: Map<string, Record<string, unknown> | undefined>,
+    progress: vscode.Progress<vscode.LanguageModelResponsePart>,
+    token: vscode.CancellationToken
   ): Promise<void> {
-    const inputTokenCount = await this.provideTokenCount(model, inputText, token);
-    const modelMaxContext = this.resolveModelMaxContext(model);
+    this.outputChannel.appendLine(
+      `[LoopDetector] WARNING: Empty stream detected (0 chars, 0 text parts, 0 tool calls) — likely a tool call failure.`
+    );
+    this.outputChannel.appendLine(
+      `[LoopDetector] Injecting recovery prompt: "${this.config.loopDetection.toolFailureRecoveryPrompt}"`
+    );
 
-    this.outputChannel.appendLine(`WARNING: Model returned empty response with no tool calls.`);
-    this.outputChannel.appendLine(`  Input tokens estimated: ${inputTokenCount}`);
-    this.outputChannel.appendLine(`  Messages in conversation: ${messageCount}`);
-    this.outputChannel.appendLine(`  Tools provided: ${toolCount}`);
+    // Report that we're recovering
+    progress.report(
+      new vscode.LanguageModelThinkingPart(
+        'The model returned an empty response. Sending a recovery request to continue...',
+        '',
+        { vscode_reasoning_done: true }
+      )
+    );
 
-    const errorHint =
-      toolCount > 0
-        ? `The model returned an empty response. This typically indicates the model failed to generate valid output with tool calling enabled. Check the inference server logs for errors.`
-        : `The model returned an empty response. Check the inference server logs for details.`;
+    try {
+      // Build recovery messages - append the recovery prompt as an assistant message
+      const recoveryMessages = [
+        ...truncatedMessages,
+        {
+          role: 'assistant',
+          content: this.config.loopDetection.toolFailureRecoveryPrompt,
+        },
+      ];
 
-    this.outputChannel.appendLine(`  Issue: ${errorHint}`);
+      const recoveryRequestOptions = buildChatRequest({
+        model: model.id,
+        messages: recoveryMessages,
+        maxTokens: safeMaxOutputTokens,
+        temperature: DEFAULT_TEMPERATURE,
+        tools: filteredTools,
+        toolChoice: filteredTools && filteredTools.length > 0 ? this.mapToolChoice(undefined) : undefined,
+        parallelToolCalls: this.config.parallelToolCalling,
+        extraOptions: {
+          ...this.config.extraModelOptions,
+          ...resolvePerModelOptions(model.id, this.config.perModelOptions),
+        },
+      });
 
-    const errorMessage =
-      `I was unable to generate a response. ${errorHint}\n\n` +
-      `Diagnostic info:\n- Model: ${model.id}\n- Tools provided: ${toolCount}\n` +
-      `- Estimated input tokens: ${inputTokenCount}\n- Context limit: ${modelMaxContext}\n\n` +
-      `Check the "GitHub Copilot LLM Gateway" output panel for detailed logs.`;
+      this.outputChannel.appendLine(`[LoopDetector] Sending recovery request to model.`);
 
-    progress.report(new vscode.LanguageModelTextPart(errorMessage));
+      const reporter = this.createStreamReporter(progress);
+      const recoveryChunks = this.client.streamChatCompletion(recoveryRequestOptions, token);
+      const recoveryStats = await streamResponse({
+        chunks: recoveryChunks as AsyncIterable<StreamChunk>,
+        reporter,
+        isCancelled: () => token.isCancellationRequested,
+        resolveToolCallArgs: (toolCall) => this.resolveToolCallArgs(toolCall, toolSchemas),
+        loopConfig: { ...this.config.loopDetection, enableLoopDetection: false },
+      });
+
+      this.outputChannel.appendLine(
+        `[LoopDetector] Recovery successful: received ${recoveryStats.totalContentLength} chars, ${recoveryStats.totalTextParts} text parts, ${recoveryStats.totalToolCalls} tool calls.`
+      );
+    } catch (error) {
+      this.outputChannel.appendLine(
+        `[LoopDetector] ERROR: Recovery request failed: ${error instanceof Error ? error.message : String(error)}`
+      );
+      progress.report(
+        new vscode.LanguageModelTextPart(
+          'I was unable to recover from an empty response. Please try again or check the inference server logs.'
+        )
+      );
+    }
   }
 
   /**
@@ -1480,6 +1531,7 @@ export class GatewayProvider
         loopDetectionReasoningBudget: config.get<number>('loopDetectionReasoningBudget', 1024),
         loopDetectionInterruptionPrompt: config.get<string>('loopDetectionInterruptionPrompt', 'You were caught in a reasoning loop. Please provide the final result now.'),
         loopDetectionContentInterruptionPrompt: config.get<string>('loopDetectionContentInterruptionPrompt', 'Loop detected. Please finalize your response and move on.'),
+        toolFailureRecoveryPrompt: config.get<string>('toolFailureRecoveryPrompt', 'Continue from where you left off right before the error.'),
       },
     };
 

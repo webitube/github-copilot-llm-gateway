@@ -252,8 +252,7 @@ export async function streamResponse(params: StreamResponseParams): Promise<Stre
 export function isEmptyStreamResult(stats: StreamStats): boolean {
   return (
     stats.totalContentLength === 0 &&
-    stats.totalToolCalls === 0 &&
-    !stats.hadThinking &&
-    !stats.thinkingForceClosed
+    stats.totalTextParts === 0 &&
+    stats.totalToolCalls === 0
   );
 }

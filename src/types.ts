@@ -9,6 +9,8 @@ export interface LoopDetectionConfig {
   loopDetectionInterruptionPrompt: string;
   /** Prompt used when a loop is detected during final token (non-reasoning) generation. */
   loopDetectionContentInterruptionPrompt: string;
+  /** Prompt used when the model returns an empty response (tool failure recovery). */
+  toolFailureRecoveryPrompt: string;
 }
 
 export interface LoopDetectionResult {

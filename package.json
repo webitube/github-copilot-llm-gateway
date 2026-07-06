@@ -253,6 +253,12 @@
           "description": "The prompt sent to the model to force convergence when a loop is detected during final token generation (non-reasoning content).",
           "order": 24
         },
+        "github.copilot.llm-gateway.toolFailureRecoveryPrompt": {
+          "type": "string",
+          "default": "Please review your work and move on. \n",
+          "description": "The prompt sent to the model when it returns an empty response (tool failure recovery).",
+          "order": 25
+        },
         "github.copilot.llm-gateway.inlineCompletionMaxTokens": {
           "type": "number",
           "default": 256,
