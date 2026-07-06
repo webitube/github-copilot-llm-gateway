@@ -1531,7 +1531,7 @@ export class GatewayProvider
         loopDetectionReasoningBudget: config.get<number>('loopDetectionReasoningBudget', 1024),
         loopDetectionInterruptionPrompt: config.get<string>('loopDetectionInterruptionPrompt', 'You were caught in a reasoning loop. Please provide the final result now.'),
         loopDetectionContentInterruptionPrompt: config.get<string>('loopDetectionContentInterruptionPrompt', 'Loop detected. Please finalize your response and move on.'),
-        toolFailureRecoveryPrompt: config.get<string>('toolFailureRecoveryPrompt', 'Continue from where you left off right before the error.'),
+        toolFailureRecoveryPrompt: config.get<string>('toolFailureRecoveryPrompt', 'Please review your work and move on. \n'),
       },
     };
 

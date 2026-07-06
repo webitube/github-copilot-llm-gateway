@@ -52,7 +52,7 @@ const LOOP_DETECT_CONFIG: LoopDetectionConfig = {
   loopDetectionWindowSize: 200,
   loopDetectionInterruptionPrompt: 'Stop reasoning and provide a final answer.',
   loopDetectionContentInterruptionPrompt: 'Loop detected. Please finalize your response and move on.',
-  toolFailureRecoveryPrompt: 'Continue from where you left off right before the error.',
+  toolFailureRecoveryPrompt: 'Please review your work and move on. \n',
 };
 
 /** Config with loop detection disabled — simulates a recovery request. */
