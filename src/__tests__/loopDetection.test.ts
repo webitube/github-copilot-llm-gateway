@@ -11,6 +11,7 @@ const DEFAULT_CONFIG: LoopDetectionConfig = {
   loopDetectionPhraseLength: 5,
   loopDetectionWindowSize: 2000,
   loopDetectionInterruptionPrompt: 'Stop reasoning and provide a final answer.',
+  loopDetectionContentInterruptionPrompt: 'Loop detected. Please finalize your response and move on.',
 };
 
 describe('LoopDetector', () => {
@@ -128,5 +129,462 @@ describe('LoopDetector', () => {
     // Content is less than windowSize * 2, so structural analysis should not trigger
     const result = detector.processChunk('Short content that should not trigger analysis.');
     assert.strictEqual(result.loopDetected, false);
+  });
+
+  test('should detect a loop when the model repeats the same code block many times (real-world C# spline regression)', () => {
+    const config: LoopDetectionConfig = {
+      ...DEFAULT_CONFIG,
+      loopDetectionReasoningBudget: 100000, // High so budget doesn't short-circuit; structural analysis should catch it
+      loopDetectionWindowSize: 5000,
+    };
+    const detector = new LoopDetector(config);
+
+    // Real log excerpt: the model generates a C# class then repeats the same
+    // `SetTarget` method ~25 times — a classic structural repetition loop.
+    const sourceText = `I'll write a C# spline interpolation function for Unity using list of knot points:
+
+\`\`\`csharp
+using System;
+using UnityEngine;
+
+public class SplineInterpolator : MonoBehaviour {
+    private Vector3[] knots = new Vector3[10];
+    
+    public void Interpolate(Vector3 target, float t) {
+        if (knots.Length < 2 || !Array.Exists(knots, x => x == target)) return;
+        
+        for (int i = 0; i <= Array.Count(knots); i++) {
+            knots[i] += Vector3.Lerp(
+                knots[(i - 1) % KnotCount], 
+                target, 
+                t * Math.pow(i + 1.0f / (KnotLength - 2), 2))
+        }
+    }
+
+    private int KnotCount = Array.Count(knots);
+    private float KnotLength;
+    
+    public void SetKnotVector(float length) {
+        if (knots.Length < 1 || knots[0] == null) return;
+        
+        for (int i = 0; i <= KnotCount - 2; i++) {
+            knots[i + 1] += Vector3.Lerp(
+                knots[(i - 1) % KnotLength], 
+                target, 
+                t * Math.pow(i + 1.0f / (KnotLength - 2), 2))
+        }
+    }
+
+    private float Target;
+    
+    public void SetTarget(float value) {
+        if (!Array.Exists(knots, x => x == value)) return;
+        
+        for (int i = 1; i <= KnotCount - 2; i++) {
+            knots[i + 1] += Vector3.Lerp(
+                knots[(i - 1) % KnotLength], 
+                target, 
+                t * Math.pow(i + 1.0f / (KnotLength - 2), 2))
+        }
+    }
+
+    private float Target;
+    
+    public void SetTarget(float value) {
+        if (!Array.Exists(knots, x => x == value)) return;
+        
+        for (int i = 1; i <= KnotCount - 2; i++) {
+            knots[i + 1] += Vector3.Lerp(
+                knots[(i - 1) % KnotLength], 
+                target, 
+                t * Math.pow(i + 1.0f / (KnotLength - 2), 2))
+        }
+    }
+
+    private float Target;
+    
+    public void SetTarget(float value) {
+        if (!Array.Exists(knots, x => x == value)) return;
+        
+        for (int i = 1; i <= KnotCount - 2; i++) {
+            knots[i + 1] += Vector3.Lerp(
+                knots[(i - 1) % KnotLength], 
+                target, 
+                t * Math.pow(i + 1.0f / (KnotLength - 2), 2))
+        }
+    }
+
+    private float Target;
+    
+    public void SetTarget(float value) {
+        if (!Array.Exists(knots, x => x == value)) return;
+        
+        for (int i = 1; i <= KnotCount - 2; i++) {
+            knots[i + 1] += Vector3.Lerp(
+                knots[(i - 1) % KnotLength], 
+                target, 
+                t * Math.pow(i + 1.0f / (KnotLength - 2), 2))
+        }
+    }
+
+    private float Target;
+    
+    public void SetTarget(float value) {
+        if (!Array.Exists(knots, x => x == value)) return;
+        
+        for (int i = 1; i <= KnotCount - 2; i++) {
+            knots[i + 1] += Vector3.Lerp(
+                knots[(i - 1) % KnotLength], 
+                target, 
+                t * Math.pow(i + 1.0f / (KnotLength - 2), 2))
+        }
+    }
+
+    private float Target;
+    
+    public void SetTarget(float value) {
+        if (!Array.Exists(knots, x => x == value)) return;
+        
+        for (int i = 1; i <= KnotCount - 2; i++) {
+            knots[i + 1] += Vector3.Lerp(
+                knots[(i - 1) % KnotLength], 
+                target, 
+                t * Math.pow(i + 1.0f / (KnotLength - 2), 2))
+        }
+    }
+
+    private float Target;
+    
+    public void SetTarget(float value) {
+        if (!Array.Exists(knots, x => x == value)) return;
+        
+        for (int i = 1; i <= KnotCount - 2; i++) {
+            knots[i + 1] += Vector3.Lerp(
+                knots[(i - 1) % KnotLength], 
+                target, 
+                t * Math.pow(i + 1.0f / (KnotLength - 2), 2))
+        }
+    }
+
+    private float Target;
+    
+    public void SetTarget(float value) {
+        if (!Array.Exists(knots, x => x == value)) return;
+        
+        for (int i = 1; i <= KnotCount - 2; i++) {
+            knots[i + 1] += Vector3.Lerp(
+                knots[(i - 1) % KnotLength], 
+                target, 
+                t * Math.pow(i + 1.0f / (KnotLength - 2), 2))
+        }
+    }
+
+    private float Target;
+    
+    public void SetTarget(float value) {
+        if (!Array.Exists(knots, x => x == value)) return;
+        
+        for (int i = 1; i <= KnotCount - 2; i++) {
+            knots[i + 1] += Vector3.Lerp(
+                knots[(i - 1) % KnotLength], 
+                target, 
+                t * Math.pow(i + 1.0f / (KnotLength - 2), 2))
+        }
+    }
+
+    private float Target;
+    
+    public void SetTarget(float value) {
+        if (!Array.Exists(knots, x => x == value)) return;
+        
+        for (int i = 1; i <= KnotCount - 2; i++) {
+            knots[i + 1] += Vector3.Lerp(
+                knots[(i - 1) % KnotLength], 
+                target, 
+                t * Math.pow(i + 1.0f / (KnotLength - 2), 2))
+        }
+    }
+
+    private float Target;
+    
+    public void SetTarget(float value) {
+        if (!Array.Exists(knots, x => x == value)) return;
+        
+        for (int i = 1; i <= KnotCount - 2; i++) {
+            knots[i + 1] += Vector3.Lerp(
+                knots[(i - 1) % KnotLength], 
+                target, 
+                t * Math.pow(i + 1.0f / (KnotLength - 2), 2))
+        }
+    }
+
+    private float Target;
+    
+    public void SetTarget(float value) {
+        if (!Array.Exists(knots, x => x == value)) return;
+        
+        for (int i = 1; i <= KnotCount - 2; i++) {
+            knots[i + 1] += Vector3.Lerp(
+                knots[(i - 1) % KnotLength], 
+                target, 
+                t * Math.pow(i + 1.0f / (KnotLength - 2), 2))
+        }
+    }
+
+    private float Target;
+    
+    public void SetTarget(float value) {
+        if (!Array.Exists(knots, x => x == value)) return;
+        
+        for (int i = 1; i <= KnotCount - 2; i++) {
+            knots[i + 1] += Vector3.Lerp(
+                knots[(i - 1) % KnotLength], 
+                target, 
+                t * Math.pow(i + 1.0f / (KnotLength - 2), 2))
+        }
+    }
+
+    private float Target;
+    
+    public void SetTarget(float value) {
+        if (!Array.Exists(knots, x => x == value)) return;
+        
+        for (int i = 1; i <= KnotCount - 2; i++) {
+            knots[i + 1] += Vector3.Lerp(
+                knots[(i - 1) % KnotLength], 
+                target, 
+                t * Math.pow(i + 1.0f / (KnotLength - 2), 2))
+        }
+    }
+
+    private float Target;
+    
+    public void SetTarget(float value) {
+        if (!Array.Exists(knots, x => x == value)) return;
+        
+        for (int i = 1; i <= KnotCount - 2; i++) {
+            knots[i + 1] += Vector3.Lerp(
+                knots[(i - 1) % KnotLength], 
+                target, 
+                t * Math.pow(i + 1.0f / (KnotLength - 2), 2))
+        }
+    }
+
+    private float Target;
+    
+    public void SetTarget(float value) {
+        if (!Array.Exists(knots, x => x == value)) return;
+        
+        for (int i = 1; i <= KnotCount - 2; i++) {
+            knots[i + 1] += Vector3.Lerp(
+                knots[(i - 1) % KnotLength], 
+                target, 
+                t * Math.pow(i + 1.0f / (KnotLength - 2), 2))
+        }
+    }
+
+    private float Target;
+    
+    public void SetTarget(float value) {
+        if (!Array.Exists(knots, x => x == value)) return;
+        
+        for (int i = 1; i <= KnotCount - 2; i++) {
+            knots[i + 1] += Vector3.Lerp(
+                knots[(i - 1) % KnotLength], 
+                target, 
+                t * Math.pow(i + 1.0f / (KnotLength - 2), 2))
+        }
+    }
+
+    private float Target;
+    
+    public void SetTarget(float value) {
+        if (!Array.Exists(knots, x => x == value)) return;
+        
+        for (int i = 1; i <= KnotCount - 2; i++) {
+            knots[i + 1] += Vector3.Lerp(
+                knots[(i - 1) % KnotLength], 
+                target, 
+                t * Math.pow(i + 1.0f / (KnotLength - 2), 2))
+        }
+    }
+
+    private float Target;
+    
+    public void SetTarget(float value) {
+        if (!Array.Exists(knots, x => x == value)) return;
+        
+        for (int i = 1; i <= KnotCount - 2; i++) {
+            knots[i + 1] += Vector3.Lerp(
+                knots[(i - 1) % KnotLength], 
+                target, 
+                t * Math.pow(i + 1.0f / (KnotLength - 2), 2))
+        }
+    }
+
+    private float Target;
+    
+    public void SetTarget(float value) {
+        if (!Array.Exists(knots, x => x == value)) return;
+        
+        for (int i = 1; i <= KnotCount - 2; i++) {
+            knots[i + 1] += Vector3.Lerp(
+                knots[(i - 1) % KnotLength], 
+                target, 
+                t * Math.pow(i + 1.0f / (KnotLength - 2), 2))
+        }
+    }
+
+    private float Target;
+    
+    public void SetTarget(float value) {
+        if (!Array.Exists(knots, x => x == value)) return;
+        
+        for (int i = 1; i <= KnotCount - 2; i++) {
+            knots[i + 1] += Vector3.Lerp(
+                knots[(i - 1) % KnotLength], 
+                target, 
+                t * Math.pow(i + 1.0f / (KnotLength - 2), 2))
+        }
+    }
+
+    private float Target;
+    
+    public void SetTarget(float value) {
+        if (!Array.Exists(knots, x => x == value)) return;
+        
+        for (int i = 1; i <= KnotCount - 2; i++) {
+            knots[i + 1] += Vector3.Lerp(
+                knots[(i - 1) % KnotLength], 
+                target, 
+                t * Math.pow(i + 1.0f / (KnotLength - 2), 2))
+        }
+    }
+
+    private float Target;
+    
+    public void SetTarget(float value) {
+        if (!Array.Exists(knots, x => x == value)) return;
+        
+        for (int i = 1; i <= KnotCount - 2; i++) {
+            knots[i + 1] += Vector3.Lerp(
+                knots[(i - 1) % KnotLength], 
+                target, 
+                t * Math.pow(i + 1.0f / (KnotLength - 2), 2))
+        }
+    }
+
+    private float Target;
+    
+    public void SetTarget(float value) {
+        if (!Array.Exists(knots, x => x == value)) return;
+        
+        for (int i = 1; i <= KnotCount - 2; i++) {
+            knots[i + 1] += Vector3.Lerp(
+                knots[(i - 1) % KnotLength], 
+                target, 
+                t * Math.pow(i + 1.0f / (KnotLength - 2), 2))
+        }
+    }
+
+    private float Target;
+    
+    public void SetTarget(float value) {
+        if (!Array.Exists(knots, x => x == value)) return;
+        
+        for (int i = 1; i <= KnotCount - 2; i++) {
+            knots[i + 1] += Vector3.Lerp(
+                knots[(i - 1) % KnotLength], 
+                target, 
+                t * Math.pow(i + 1.0f / (KnotLength - 2), 2))
+        }
+    }
+
+    private float Target;
+    
+    public void SetTarget(float value) {
+        if (!Array.Exists(knots, x => x == value)) return;
+        
+        for (int i = 1; i <= KnotCount - 2; i++) {
+            knots[i + 1] += Vector3.Lerp(
+                knots[(i - 1) % KnotLength], 
+                target, 
+                t * Math.pow(i + 1.0f / (KnotLength - 2), 2))
+        }
+    }
+
+    private float Target;
+    
+    public void SetTarget(float value) {
+        if (!Array.Exists(knots, x => x == value)) return;
+        
+        for (int i = 1; i <= KnotCount - 2; i++) {
+            knots[i + 1] += Vector3.Lerp(
+                knots[(i - 1) % KnotLength], 
+                target, 
+                t * Math.pow(i + 1.0f / (KnotLength - 2), 2))
+        }
+    }
+
+    private float Target;
+    
+    public void SetTarget(float value) {
+        if (!Array.Exists(knots, x => x == value)) return;
+        
+        for (int i = 1; i <= KnotCount - 2; i++) {
+            knots[i + 1] += Vector3.Lerp(
+                knots[(i - 1) % KnotLength], 
+                target, 
+                t * Math.pow(i + 1.0f / (KnotLength - 2), 2))
+        }
+    }
+
+    private float Target;
+    
+    public void SetTarget(float value) {
+        if (!Array.Exists(knots, x => x == value)) return;
+        
+        for (int i = 1; i <= KnotCount - 2; i++) {
+            knots[i + 1] += Vector3.Lerp(
+                knots[(i - 1) % KnotLength], 
+                target, 
+                t * Math.pow(i + 1.0f / (KnotLength - 2), 2))
+        }
+    }
+
+    private float Target;
+    
+    public void SetTarget(float value) {
+        if (!Array.Exists(knots, x => x == value)) return;
+        
+        for (int i = 1; i <= KnotCount - 2; i++) {
+            knots[i + 1] += Vector3.Lerp(
+                knots[(i - 1) % KnotLength], 
+                target, 
+                t * Math.pow(i + 1.0f / (KnotLength - 2), 2))
+        }
+    }
+
+    private float Target;
+    
+    public void SetTarget(float value) {
+        if (!Array.Exists(knots, x => x == value)) return;
+        
+        for (int i = 1; i <= KnotCount - 2; i++) {
+            knots[i + 1] += Vector3.Lerp(
+                knots[(i - 1) % KnotLength], 
+                target, 
+                t * Math.pow(i + 1.0f / (KnotLength - 2), 2))
+        }
+    }
+
+    private float Target;
+    
+    public void SetTarget(float value) {
+        if (!Array.Exists(knots, x =>
+`;
+
+    const result = detector.processChunk(sourceText);
+    assert.strictEqual(result.loopDetected, true, `Expected loop to be detected for repeated C# code blocks. Got reason: ${result.reason ?? '(none)'}`);
   });
 });

@@ -41,6 +41,10 @@ export interface StreamStats {
   hadThinking: boolean;
   thinkingForceClosed: boolean;
   loopDetected: boolean;
+  /** Human-readable reason the loop detector fired, if `loopDetected` is true. */
+  loopDetectionReason?: string;
+  /** True when the loop was detected inside reasoning/thinking content; false when detected during final token generation. */
+  loopDetectedInReasoning?: boolean;
   /**
    * True once a usage frame has been dispatched to the reporter. Internal
    * book-keeping to dedupe re-emitted totals from chatty servers; optional
@@ -63,6 +67,17 @@ export interface StreamResponseParams {
    * from the tool's schema.
    */
   resolveToolCallArgs: (toolCall: { id: string; name: string; arguments: string }) => Record<string, unknown>;
+  /**
+   * Optional callback invoked with every chunk of reasoning content that is
+   * fed to the loop detector. Useful for debug logging so the tokens being
+   * analyzed are visible in the output window.
+   */
+  onLoopDetectTokens?: (tokens: string) => void;
+  /**
+   * Optional callback invoked when the loop detector fires, carrying the
+   * human-readable reason for the detection.
+   */
+  onLoopDetected?: (reason: string) => void;
 }
 
 const FORCE_CLOSED_THINKING_FALLBACK =
@@ -113,16 +128,22 @@ function processStreamChunk(
   stats: StreamStats,
   inReasoningField: boolean,
   resolveToolCallArgs: StreamResponseParams['resolveToolCallArgs'],
-  detector: LoopDetector
+  detector: LoopDetector,
+  onLoopDetectTokens: StreamResponseParams['onLoopDetectTokens'],
+  onLoopDetected: StreamResponseParams['onLoopDetected'],
 ): boolean {
   if (chunk.reasoning_content) {
     stats.hadThinking = true;
     inReasoningField = true;
     reporter.reportThinking(chunk.reasoning_content);
 
+    onLoopDetectTokens?.(chunk.reasoning_content);
     const result = detector.processChunk(chunk.reasoning_content);
     if (result.loopDetected) {
       stats.loopDetected = true;
+      stats.loopDetectionReason = result.reason ?? 'Loop detected (no reason)';
+      stats.loopDetectedInReasoning = true;
+      onLoopDetected?.(stats.loopDetectionReason);
       // We don't break here because processStreamChunk is a helper;
       // the loop in streamResponse will handle the break.
     }
@@ -136,10 +157,17 @@ function processStreamChunk(
     stats.totalContentLength += chunk.content.length;
     for (const piece of parser.process(chunk.content)) {
       reportParserPiece(piece, reporter, stats, false);
-      if (piece.t === 'T') {
+      // Feed both thinking ('T') and regular text ('t') to the loop detector
+      // so models that loop in regular output (not just reasoning_content)
+      // are still caught.
+      if (piece.t === 'T' || piece.t === 't') {
+        onLoopDetectTokens?.(piece.c);
         const result = detector.processChunk(piece.c);
         if (result.loopDetected) {
           stats.loopDetected = true;
+          stats.loopDetectionReason = result.reason ?? 'Loop detected (no reason)';
+          stats.loopDetectedInReasoning = false;
+          onLoopDetected?.(stats.loopDetectionReason);
         }
       }
     }
@@ -170,7 +198,7 @@ function processStreamChunk(
  * use to decide whether the response was empty and needs an error fallback.
  */
 export async function streamResponse(params: StreamResponseParams): Promise<StreamStats> {
-  const { chunks, reporter, isCancelled, resolveToolCallArgs, loopConfig } = params;
+  const { chunks, reporter, isCancelled, resolveToolCallArgs, loopConfig, onLoopDetectTokens, onLoopDetected } = params;
 
   const stats: StreamStats = {
     totalContentLength: 0,
@@ -191,7 +219,7 @@ export async function streamResponse(params: StreamResponseParams): Promise<Stre
       break;
     }
     inReasoningField = processStreamChunk(
-      chunk, parser, reporter, stats, inReasoningField, resolveToolCallArgs, detector
+      chunk, parser, reporter, stats, inReasoningField, resolveToolCallArgs, detector, onLoopDetectTokens, onLoopDetected
     );
   }
 

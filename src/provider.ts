@@ -687,6 +687,12 @@ export class GatewayProvider
         isCancelled: () => token.isCancellationRequested,
         resolveToolCallArgs: (toolCall) => this.resolveToolCallArgs(toolCall, toolSchemas),
         loopConfig: this.config.loopDetection,
+        onLoopDetectTokens: this.config.loopDetection.enableLoopDetection
+          ? (t) => this.outputChannel.appendLine(`[LoopDetector] ${t}`)
+          : undefined,
+        onLoopDetected: this.config.loopDetection.enableLoopDetection
+          ? (reason) => this.outputChannel.appendLine(`[LoopDetector] LOOP DETECTED: ${reason}`)
+          : undefined,
       });
 
       this.outputChannel.appendLine(
@@ -695,8 +701,19 @@ export class GatewayProvider
 
       // Recovery protocol: if a loop was detected, send a recovery request
       if (stats.loopDetected) {
-        this.outputChannel.appendLine('WARNING: Loop detected, initiating recovery protocol.');
-        await this.handleLoopRecovery(model, truncatedMessages, safeMaxOutputTokens, filteredTools, toolSchemas, progress, token);
+        this.outputChannel.appendLine(
+          `[LoopDetector] WARNING: Loop detected (${stats.loopDetectionReason ?? 'unknown reason'}), initiating recovery protocol.`
+        );
+        await this.handleLoopRecovery(
+          model,
+          truncatedMessages,
+          safeMaxOutputTokens,
+          filteredTools,
+          toolSchemas,
+          progress,
+          token,
+          stats.loopDetectedInReasoning
+        );
       } else if (isEmptyStreamResult(stats)) {
         const toolCount = filteredTools?.length ?? 0;
         await this.handleEmptyResponse(model, inputText, openAIMessages.length, toolCount, token, progress);
@@ -1253,7 +1270,8 @@ export class GatewayProvider
 
   /**
    * Handle loop recovery by sending a recovery request to the model.
-   * This appends the interruption prompt to force the model out of its reasoning loop.
+   * This appends the interruption prompt to force the model out of its loop.
+   * @param inReasoning Whether the loop was detected during reasoning content (true) or final token generation (false).
    */
   private async handleLoopRecovery(
     model: vscode.LanguageModelChatInformation,
@@ -1262,14 +1280,22 @@ export class GatewayProvider
     filteredTools: OpenAIToolDefinition[] | undefined,
     toolSchemas: Map<string, Record<string, unknown> | undefined>,
     progress: vscode.Progress<vscode.LanguageModelResponsePart>,
-    token: vscode.CancellationToken
+    token: vscode.CancellationToken,
+    inReasoning: boolean | undefined
   ): Promise<void> {
-    this.outputChannel.appendLine('Initiating loop recovery protocol.');
+    this.outputChannel.appendLine('[LoopDetector] Initiating loop recovery protocol.');
+
+    const isReasoningLoop = inReasoning !== false; // Default to reasoning loop if unknown
+    const interruptionPrompt = isReasoningLoop
+      ? this.config.loopDetection.loopDetectionInterruptionPrompt
+      : this.config.loopDetection.loopDetectionContentInterruptionPrompt;
 
     // Report that we're recovering
     progress.report(
       new vscode.LanguageModelThinkingPart(
-        'The model was caught in a reasoning loop. Sending a recovery request to force a final result...',
+        isReasoningLoop
+          ? 'The model was caught in a reasoning loop. Sending a recovery request to force a final result...'
+          : 'The model was caught in a content generation loop. Sending a recovery request to finalize the response...',
         '',
         { vscode_reasoning_done: true }
       )
@@ -1281,7 +1307,7 @@ export class GatewayProvider
         ...truncatedMessages,
         {
           role: 'assistant',
-          content: this.config.loopDetection.loopDetectionInterruptionPrompt,
+          content: interruptionPrompt,
         },
       ];
 
@@ -1299,7 +1325,7 @@ export class GatewayProvider
         },
       });
 
-      this.outputChannel.appendLine('Sending recovery request to model.');
+      this.outputChannel.appendLine('[LoopDetector] Sending recovery request to model.');
 
       const reporter = this.createStreamReporter(progress);
       const recoveryChunks = this.client.streamChatCompletion(recoveryRequestOptions, token);
@@ -1309,13 +1335,19 @@ export class GatewayProvider
         isCancelled: () => token.isCancellationRequested,
         resolveToolCallArgs: (toolCall) => this.resolveToolCallArgs(toolCall, toolSchemas),
         loopConfig: { ...this.config.loopDetection, enableLoopDetection: false },
+        onLoopDetectTokens: this.config.loopDetection.enableLoopDetection
+          ? (t) => this.outputChannel.appendLine(`[LoopDetector] ${t}`)
+          : undefined,
+        onLoopDetected: this.config.loopDetection.enableLoopDetection
+          ? (reason) => this.outputChannel.appendLine(`[LoopDetector] LOOP DETECTED: ${reason}`)
+          : undefined,
       });
 
       this.outputChannel.appendLine(
-        `Recovery request completed, received ${recoveryStats.totalContentLength} chars, ${recoveryStats.totalTextParts} text parts, ${recoveryStats.totalToolCalls} tool calls`
+        `[LoopDetector] Recovery request completed, received ${recoveryStats.totalContentLength} chars, ${recoveryStats.totalTextParts} text parts, ${recoveryStats.totalToolCalls} tool calls`
       );
     } catch (error) {
-      this.outputChannel.appendLine(`ERROR: Recovery request failed: ${error instanceof Error ? error.message : String(error)}`);
+      this.outputChannel.appendLine(`[LoopDetector] ERROR: Recovery request failed: ${error instanceof Error ? error.message : String(error)}`);
       progress.report(
         new vscode.LanguageModelTextPart(
           'I was unable to recover from a reasoning loop. Please try again or check the inference server logs.'
@@ -1447,6 +1479,7 @@ export class GatewayProvider
         loopDetectionPhraseLength: config.get<number>('loopDetectionPhraseLength', 4),
         loopDetectionReasoningBudget: config.get<number>('loopDetectionReasoningBudget', 1024),
         loopDetectionInterruptionPrompt: config.get<string>('loopDetectionInterruptionPrompt', 'You were caught in a reasoning loop. Please provide the final result now.'),
+        loopDetectionContentInterruptionPrompt: config.get<string>('loopDetectionContentInterruptionPrompt', 'Loop detected. Please finalize your response and move on.'),
       },
     };
 

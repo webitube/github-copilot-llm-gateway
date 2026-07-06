@@ -16,6 +16,7 @@ const DEFAULT_LOOP_CONFIG: LoopDetectionConfig = {
   loopDetectionPhraseLength: 5,
   loopDetectionWindowSize: 2000,
   loopDetectionInterruptionPrompt: 'Stop reasoning and provide a final answer.',
+  loopDetectionContentInterruptionPrompt: 'Loop detected. Please finalize your response and move on.',
 };
 
 interface ReporterEvent {

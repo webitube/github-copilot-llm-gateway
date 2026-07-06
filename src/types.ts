@@ -5,7 +5,10 @@ export interface LoopDetectionConfig {
   loopDetectionUniqueRatio: number;
   loopDetectionPhraseLength: number;
   loopDetectionReasoningBudget: number;
+  /** Prompt used when a loop is detected during reasoning / thinking content. */
   loopDetectionInterruptionPrompt: string;
+  /** Prompt used when a loop is detected during final token (non-reasoning) generation. */
+  loopDetectionContentInterruptionPrompt: string;
 }
 
 export interface LoopDetectionResult {

@@ -244,8 +244,14 @@
         "github.copilot.llm-gateway.loopDetectionInterruptionPrompt": {
           "type": "string",
           "default": "You were caught in a reasoning loop. Please provide the final result now.",
-          "description": "The prompt sent to the model to force convergence when a loop is detected.",
+          "description": "The prompt sent to the model to force convergence when a reasoning loop is detected.",
           "order": 23
+        },
+        "github.copilot.llm-gateway.loopDetectionContentInterruptionPrompt": {
+          "type": "string",
+          "default": "Loop detected. Please finalize your response and move on.",
+          "description": "The prompt sent to the model to force convergence when a loop is detected during final token generation (non-reasoning content).",
+          "order": 24
         },
         "github.copilot.llm-gateway.inlineCompletionMaxTokens": {
           "type": "number",

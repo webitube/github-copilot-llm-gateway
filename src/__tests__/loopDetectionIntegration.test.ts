@@ -51,6 +51,7 @@ const LOOP_DETECT_CONFIG: LoopDetectionConfig = {
   loopDetectionPhraseLength: 3,
   loopDetectionWindowSize: 200,
   loopDetectionInterruptionPrompt: 'Stop reasoning and provide a final answer.',
+  loopDetectionContentInterruptionPrompt: 'Loop detected. Please finalize your response and move on.',
 };
 
 /** Config with loop detection disabled — simulates a recovery request. */
