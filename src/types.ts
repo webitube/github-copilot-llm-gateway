@@ -11,6 +11,8 @@ export interface LoopDetectionConfig {
   loopDetectionContentInterruptionPrompt: string;
   /** Prompt used when the model returns an empty response (tool failure recovery). */
   toolFailureRecoveryPrompt: string;
+  /** Whether to enable tool failure recovery (re-sending a prompt on empty responses). Disabled by default as the feature is currently broken. */
+  enableToolFailureRecovery: boolean;
 }
 
 export interface LoopDetectionResult {

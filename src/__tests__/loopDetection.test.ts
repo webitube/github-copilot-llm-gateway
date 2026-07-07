@@ -13,6 +13,7 @@ const DEFAULT_CONFIG: LoopDetectionConfig = {
   loopDetectionInterruptionPrompt: 'Stop reasoning and provide a final answer.',
   loopDetectionContentInterruptionPrompt: 'Loop detected. Please finalize your response and move on.',
   toolFailureRecoveryPrompt: 'Please review your work and move on. \n',
+  enableToolFailureRecovery: false,
 };
 
 describe('LoopDetector', () => {

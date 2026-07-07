@@ -714,7 +714,7 @@ export class GatewayProvider
           token,
           stats.loopDetectedInReasoning
         );
-      } else if (isEmptyStreamResult(stats)) {
+      } else if (isEmptyStreamResult(stats) && this.config.loopDetection.enableToolFailureRecovery) {
         await this.handleEmptyResponse(
           model,
           truncatedMessages,
@@ -1525,13 +1525,14 @@ export class GatewayProvider
       loopDetection: {
         enableLoopDetection: config.get<boolean>('enableLoopDetection', false),
         loopDetectionWindowSize: config.get<number>('loopDetectionWindowSize', 200),
-        loopDetectionMaxRepeats: config.get<number>('loopDetectionMaxRepeats', 2),
+        loopDetectionMaxRepeats: config.get<number>('loopDetectionMaxRepeats', 3),
         loopDetectionUniqueRatio: config.get<number>('loopDetectionUniqueRatio', 0.3),
         loopDetectionPhraseLength: config.get<number>('loopDetectionPhraseLength', 4),
         loopDetectionReasoningBudget: config.get<number>('loopDetectionReasoningBudget', 1024),
         loopDetectionInterruptionPrompt: config.get<string>('loopDetectionInterruptionPrompt', 'You were caught in a reasoning loop. Please provide the final result now.'),
         loopDetectionContentInterruptionPrompt: config.get<string>('loopDetectionContentInterruptionPrompt', 'Loop detected. Please finalize your response and move on.'),
         toolFailureRecoveryPrompt: config.get<string>('toolFailureRecoveryPrompt', 'Please review your work and move on. \n'),
+        enableToolFailureRecovery: config.get<boolean>('enableToolFailureRecovery', false),
       },
     };
 
